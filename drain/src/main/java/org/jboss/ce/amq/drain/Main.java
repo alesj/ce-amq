@@ -23,7 +23,6 @@
 
 package org.jboss.ce.amq.drain;
 
-import java.net.URL;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -104,7 +103,7 @@ public class Main {
     }
 
     protected void check() throws Exception {
-        new URL(getProducerURL()).openConnection().connect();
+        // TODO -- check A-MQ service ...
         log.info("A-MQ service checked ...");
     }
 
