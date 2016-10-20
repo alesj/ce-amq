@@ -113,6 +113,7 @@ public class Main {
         final Semaphore statsSemaphore = new Semaphore(0);
 
         final Stats stats = new Stats();
+        TM.begin();
         try {
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
                 public void run() {
@@ -204,10 +205,14 @@ public class Main {
                 }
             }
 
+            TM.commit();
+
             if (!terminating.get()) {
                 log.info("-- [CE] A-MQ migration finished. --");
             }
         } finally {
+            TM.end();
+
             statsSemaphore.release();
         }
     }

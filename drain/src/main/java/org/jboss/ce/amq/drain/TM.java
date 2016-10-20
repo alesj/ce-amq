@@ -21,39 +21,39 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
 
-package org.jboss.ce.amq.drain.jms;
+package org.jboss.ce.amq.drain;
 
-import javax.jms.Destination;
-import javax.jms.JMSException;
-import javax.jms.Message;
-import javax.jms.MessageProducer;
+import javax.transaction.Status;
+import javax.transaction.SystemException;
+import javax.transaction.TransactionManager;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public class Producer extends Client {
-    public Producer(String url, String username, String password) {
-        super(url, username, password);
+public class TM {
+    public static TransactionManager getTransactionManager() {
+        return com.arjuna.ats.jta.TransactionManager.transactionManager();
     }
 
-    public ProducerProcessor processQueueMessages(String queue) throws JMSException {
-        return processMessages(createQueue(queue));
+    public static boolean isActive() {
+        try {
+            return (getTransactionManager().getStatus() == Status.STATUS_ACTIVE);
+        } catch (SystemException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
-    public ProducerProcessor processTopicMessages(String topic) throws JMSException {
-        return processMessages(getSession().createTopic(topic));
+    static void begin() throws Exception {
+        getTransactionManager().begin();
     }
 
-    private ProducerProcessor processMessages(Destination destination) throws JMSException {
-        final MessageProducer producer = getSession().createProducer(destination);
-        return new ProducerProcessor() {
-            public void processMessage(Message message) throws JMSException {
-                producer.send(message);
-            }
-        };
+    static void commit() throws Exception {
+        getTransactionManager().commit();
     }
 
-    public interface ProducerProcessor {
-        void processMessage(Message message) throws JMSException;
+    static void end() throws Exception {
+        if (isActive()) {
+            getTransactionManager().rollback();
+        }
     }
 }

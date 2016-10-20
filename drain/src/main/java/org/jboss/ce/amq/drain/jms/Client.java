@@ -34,13 +34,14 @@ import javax.jms.JMSException;
 import javax.jms.MapMessage;
 import javax.jms.Message;
 import javax.jms.ObjectMessage;
+import javax.jms.Queue;
 import javax.jms.Session;
 import javax.jms.StreamMessage;
 import javax.jms.TextMessage;
 import javax.jms.Topic;
 import javax.jms.TopicSubscriber;
 
-import org.apache.activemq.ActiveMQConnectionFactory;
+import org.jboss.ce.amq.drain.TM;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
@@ -84,8 +85,9 @@ public abstract class Client implements Closeable {
         return session;
     }
 
-    protected ConnectionFactory getConnectionFactory() {
-        return new ActiveMQConnectionFactory(url);
+    protected ConnectionFactoryAdapter getConnectionFactoryAdapter() {
+        boolean isXA = TM.isActive();
+        return (isXA ? new XAConnectionFactoryAdapter() : new DefaultConnectionFactoryAdapter());
     }
 
     protected void init(Connection connection) throws JMSException {
@@ -113,7 +115,7 @@ public abstract class Client implements Closeable {
     }
 
     public void start() throws JMSException {
-        ConnectionFactory cf = getConnectionFactory();
+        ConnectionFactory cf = getConnectionFactoryAdapter().createFactory(url);
         connection = (username != null && password != null) ? cf.createConnection(username, password) : cf.createConnection();
         init(connection);
         session = connection.createSession(transacted, mode);
@@ -125,6 +127,10 @@ public abstract class Client implements Closeable {
             throw new IllegalStateException("No start invoked?");
         }
         connection.stop();
+    }
+
+    protected Queue createQueue(String queueName) throws JMSException {
+        return getSession().createQueue(queueName);
     }
 
     public TopicSubscriber getTopicSubscriber(String topicName, String subscriptionName) throws JMSException {

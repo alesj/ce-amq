@@ -23,37 +23,16 @@
 
 package org.jboss.ce.amq.drain.jms;
 
-import javax.jms.Destination;
+import javax.jms.ConnectionFactory;
 import javax.jms.JMSException;
-import javax.jms.Message;
-import javax.jms.MessageProducer;
+
+import org.apache.activemq.ActiveMQConnectionFactory;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public class Producer extends Client {
-    public Producer(String url, String username, String password) {
-        super(url, username, password);
-    }
-
-    public ProducerProcessor processQueueMessages(String queue) throws JMSException {
-        return processMessages(createQueue(queue));
-    }
-
-    public ProducerProcessor processTopicMessages(String topic) throws JMSException {
-        return processMessages(getSession().createTopic(topic));
-    }
-
-    private ProducerProcessor processMessages(Destination destination) throws JMSException {
-        final MessageProducer producer = getSession().createProducer(destination);
-        return new ProducerProcessor() {
-            public void processMessage(Message message) throws JMSException {
-                producer.send(message);
-            }
-        };
-    }
-
-    public interface ProducerProcessor {
-        void processMessage(Message message) throws JMSException;
+class DefaultConnectionFactoryAdapter implements ConnectionFactoryAdapter {
+    public ConnectionFactory createFactory(String url) throws JMSException {
+        return new ActiveMQConnectionFactory(url);
     }
 }

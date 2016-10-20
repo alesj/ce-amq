@@ -58,10 +58,6 @@ public class Consumer extends Client {
         return jmx;
     }
 
-    private Queue createQueue(String queueName) throws JMSException {
-        return getSession().createQueue(queueName);
-    }
-
     public MessageConsumer queueConsumer(String queueName) throws JMSException {
         return getSession().createConsumer(createQueue(queueName));
     }
