@@ -36,6 +36,7 @@ import org.jboss.ce.amq.drain.jms.Consumer;
 import org.jboss.ce.amq.drain.jms.Producer;
 import org.jboss.ce.amq.drain.jmx.DTSTuple;
 import org.jboss.ce.amq.drain.jmx.DestinationHandle;
+import org.jboss.ce.amq.drain.tx.TM;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -113,6 +114,11 @@ public class Main {
         final Semaphore statsSemaphore = new Semaphore(0);
 
         final Stats stats = new Stats();
+
+        BrokerConfig consumerConfig = new BrokerConfig(consumerURL, consumerUsername, consumerPassword);
+        BrokerConfig producerConfig = new BrokerConfig(getProducerURL(), producerUsername, producerPassword);
+        TM.init(consumerConfig, producerConfig);
+
         TM.begin();
         try {
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {

@@ -23,37 +23,29 @@
 
 package org.jboss.ce.amq.drain;
 
-import javax.transaction.Status;
-import javax.transaction.SystemException;
-import javax.transaction.TransactionManager;
-
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public class TM {
-    public static TransactionManager getTransactionManager() {
-        return com.arjuna.ats.jta.TransactionManager.transactionManager();
+public class BrokerConfig {
+    private String url;
+    private String username;
+    private String password;
+
+    public BrokerConfig(String url, String username, String password) {
+        this.url = url;
+        this.username = username;
+        this.password = password;
     }
 
-    public static boolean isActive() {
-        try {
-            return (getTransactionManager().getStatus() == Status.STATUS_ACTIVE);
-        } catch (SystemException e) {
-            throw new IllegalStateException(e);
-        }
+    public String getUrl() {
+        return url;
     }
 
-    static void begin() throws Exception {
-        getTransactionManager().begin();
+    public String getUsername() {
+        return username;
     }
 
-    static void commit() throws Exception {
-        getTransactionManager().commit();
-    }
-
-    static void end() throws Exception {
-        if (isActive()) {
-            getTransactionManager().rollback();
-        }
+    public String getPassword() {
+        return password;
     }
 }

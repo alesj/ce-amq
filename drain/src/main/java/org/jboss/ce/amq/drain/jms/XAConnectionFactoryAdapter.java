@@ -25,37 +25,14 @@ package org.jboss.ce.amq.drain.jms;
 
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSException;
-import javax.jms.XAConnection;
-import javax.jms.XAConnectionFactory;
 
-import org.apache.activemq.ActiveMQXAConnectionFactory;
-import org.apache.activemq.jms.pool.XaPooledConnectionFactory;
-import org.jboss.ce.amq.drain.TM;
+import org.jboss.ce.amq.drain.tx.TM;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 class XAConnectionFactoryAdapter implements ConnectionFactoryAdapter {
     public ConnectionFactory createFactory(String url) throws JMSException {
-        XaPooledConnectionFactory factory = new XaPooledConnectionFactory();
-        factory.setTransactionManager(TM.getTransactionManager());
-        factory.setConnectionFactory(new XAConnectionFactoryOnly(new ActiveMQXAConnectionFactory(url)));
-        return factory;
-    }
-
-    static class XAConnectionFactoryOnly implements XAConnectionFactory {
-        private final XAConnectionFactory connectionFactory;
-
-        XAConnectionFactoryOnly(XAConnectionFactory connectionFactory) {
-            this.connectionFactory = connectionFactory;
-        }
-
-        public XAConnection createXAConnection() throws JMSException {
-            return connectionFactory.createXAConnection();
-        }
-
-        public XAConnection createXAConnection(String username, String password) throws JMSException {
-            return connectionFactory.createXAConnection(username, password);
-        }
+        return TM.createConnectionFactory(url);
     }
 }

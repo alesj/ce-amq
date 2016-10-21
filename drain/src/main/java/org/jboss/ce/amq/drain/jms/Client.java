@@ -41,7 +41,7 @@ import javax.jms.TextMessage;
 import javax.jms.Topic;
 import javax.jms.TopicSubscriber;
 
-import org.jboss.ce.amq.drain.TM;
+import org.jboss.ce.amq.drain.tx.TM;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
