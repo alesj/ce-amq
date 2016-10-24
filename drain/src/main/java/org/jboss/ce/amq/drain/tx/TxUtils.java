@@ -49,9 +49,11 @@ import org.jboss.ce.amq.drain.Utils;
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 public class TxUtils {
+    private static final List<XaPooledConnectionFactory> FACTORIES = new ArrayList<>();
+
     public static void init(BrokerConfig... brokerConfigs) {
         BeanPopulator.getDefaultInstance(ObjectStoreEnvironmentBean.class).setObjectStoreDir(Utils.getSystemPropertyOrEnvVar("recovery.store.dir", "/opt/amq/data/recovery"));
-        RecoveryManager.delayRecoveryManagerThread() ;
+        RecoveryManager.delayRecoveryManagerThread();
         BeanPopulator.getDefaultInstance(RecoveryEnvironmentBean.class).setRecoveryBackoffPeriod(1);
 
         List<XAResourceRecovery> recoveryClassNames = new ArrayList<>();
@@ -65,10 +67,12 @@ public class TxUtils {
         return com.arjuna.ats.jta.TransactionManager.transactionManager();
     }
 
-    public static ConnectionFactory createXAConnectionFactory(String url) {
+    public synchronized static ConnectionFactory createXAConnectionFactory(String url) {
+        // we don't need pool explicity, but it already has all the XA code needed
         XaPooledConnectionFactory factory = new XaPooledConnectionFactory();
         factory.setTransactionManager(TxUtils.getTransactionManager());
         factory.setConnectionFactory(new XAConnectionFactoryOnly(new ActiveMQXAConnectionFactory(url)));
+        FACTORIES.add(factory);
         return factory;
     }
 
@@ -94,9 +98,11 @@ public class TxUtils {
         }
     }
 
-    public static void shutdown() {
-//        RecoveryManager.manager().terminate();
-//        TransactionReaper.terminate(false);
+    public synchronized static void shutdown() {
+        for (XaPooledConnectionFactory factory : FACTORIES) {
+            factory.stop();
+        }
+        FACTORIES.clear();
     }
 
     static class XAConnectionFactoryOnly implements XAConnectionFactory {
