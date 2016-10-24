@@ -23,6 +23,9 @@
 
 package org.jboss.ce.amq.drain.tx;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.sql.SQLException;
 
 import javax.jms.Connection;
@@ -42,7 +45,6 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
     private String password;
 
     private boolean checked;
-    private XAResource resource;
 
     public BrokerXAResourceRecovery(String url, String username, String password) {
         this.url = url;
@@ -51,7 +53,7 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
     }
 
     public XAResource getXAResource() throws SQLException {
-        return resource;
+        return (XAResource) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{XAResource.class}, new XAResourceProxyHandler());
     }
 
     public boolean initialise(String p) throws SQLException {
@@ -60,19 +62,31 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
 
     public synchronized boolean hasMoreResources() {
         if (!checked) {
+            checked = true;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    private class XAResourceProxyHandler implements InvocationHandler {
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
             try {
-                ConnectionFactory cf = TM.createConnectionFactory(url);
+                ConnectionFactory cf = TxUtils.createXAConnectionFactory(url);
                 Connection connection = (username != null && password != null) ? cf.createConnection(username, password) : cf.createConnection();
-                if (connection instanceof XAConnection) {
-                    resource = XAConnection.class.cast(connection).createXASession().getXAResource();
+                try {
+                    if (connection instanceof XAConnection) {
+                        XAResource target = XAConnection.class.cast(connection).createXASession().getXAResource();
+                        return method.invoke(target, args);
+                    } else {
+                        throw new IllegalArgumentException("No XA resource available?!");
+                    }
+                } finally {
+                    connection.close();
                 }
-                checked = true;
             } catch (JMSException e) {
                 throw new IllegalStateException(e);
             }
-            return (resource != null);
-        } else {
-            return false;
         }
     }
 }

@@ -41,7 +41,7 @@ import javax.jms.TextMessage;
 import javax.jms.Topic;
 import javax.jms.TopicSubscriber;
 
-import org.jboss.ce.amq.drain.tx.TM;
+import org.jboss.ce.amq.drain.tx.TxUtils;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
@@ -86,7 +86,7 @@ public abstract class Client implements Closeable {
     }
 
     protected ConnectionFactoryAdapter getConnectionFactoryAdapter() {
-        boolean isXA = TM.isActive();
+        boolean isXA = TxUtils.isTxActive();
         return (isXA ? new XAConnectionFactoryAdapter() : new DefaultConnectionFactoryAdapter());
     }
 

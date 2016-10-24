@@ -26,13 +26,13 @@ package org.jboss.ce.amq.drain.jms;
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSException;
 
-import org.jboss.ce.amq.drain.tx.TM;
+import org.jboss.ce.amq.drain.tx.TxUtils;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 class XAConnectionFactoryAdapter implements ConnectionFactoryAdapter {
     public ConnectionFactory createFactory(String url) throws JMSException {
-        return TM.createConnectionFactory(url);
+        return TxUtils.createXAConnectionFactory(url);
     }
 }

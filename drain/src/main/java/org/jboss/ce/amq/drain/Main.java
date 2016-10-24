@@ -36,7 +36,7 @@ import org.jboss.ce.amq.drain.jms.Consumer;
 import org.jboss.ce.amq.drain.jms.Producer;
 import org.jboss.ce.amq.drain.jmx.DTSTuple;
 import org.jboss.ce.amq.drain.jmx.DestinationHandle;
-import org.jboss.ce.amq.drain.tx.TM;
+import org.jboss.ce.amq.drain.tx.TxUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,9 +117,9 @@ public class Main {
 
         BrokerConfig consumerConfig = new BrokerConfig(consumerURL, consumerUsername, consumerPassword);
         BrokerConfig producerConfig = new BrokerConfig(getProducerURL(), producerUsername, producerPassword);
-        TM.init(consumerConfig, producerConfig);
+        TxUtils.init(consumerConfig, producerConfig);
 
-        TM.begin();
+        TxUtils.begin();
         try {
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
                 public void run() {
@@ -211,13 +211,13 @@ public class Main {
                 }
             }
 
-            TM.commit();
+            TxUtils.commit();
 
             if (!terminating.get()) {
                 log.info("-- [CE] A-MQ migration finished. --");
             }
         } finally {
-            TM.end();
+            TxUtils.end();
 
             statsSemaphore.release();
         }

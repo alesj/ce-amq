@@ -48,7 +48,7 @@ import org.jboss.ce.amq.drain.Utils;
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public class TM {
+public class TxUtils {
     public static void init(BrokerConfig... brokerConfigs) {
         BeanPopulator.getDefaultInstance(ObjectStoreEnvironmentBean.class).setObjectStoreDir(Utils.getSystemPropertyOrEnvVar("recovery.store.dir", "/opt/amq/data/recovery"));
         RecoveryManager.delayRecoveryManagerThread() ;
@@ -65,14 +65,14 @@ public class TM {
         return com.arjuna.ats.jta.TransactionManager.transactionManager();
     }
 
-    public static ConnectionFactory createConnectionFactory(String url) {
+    public static ConnectionFactory createXAConnectionFactory(String url) {
         XaPooledConnectionFactory factory = new XaPooledConnectionFactory();
-        factory.setTransactionManager(TM.getTransactionManager());
+        factory.setTransactionManager(TxUtils.getTransactionManager());
         factory.setConnectionFactory(new XAConnectionFactoryOnly(new ActiveMQXAConnectionFactory(url)));
         return factory;
     }
 
-    public static boolean isActive() {
+    public static boolean isTxActive() {
         try {
             return (getTransactionManager().getStatus() == Status.STATUS_ACTIVE);
         } catch (SystemException e) {
@@ -89,7 +89,7 @@ public class TM {
     }
 
     public static void end() throws Exception {
-        if (isActive()) {
+        if (isTxActive()) {
             getTransactionManager().rollback();
         }
     }
