@@ -117,109 +117,113 @@ public class Main {
 
         BrokerConfig consumerConfig = new BrokerConfig(consumerURL, consumerUsername, consumerPassword);
         BrokerConfig producerConfig = new BrokerConfig(getProducerURL(), producerUsername, producerPassword);
+
         TxUtils.init(consumerConfig, producerConfig);
-
-        TxUtils.begin();
         try {
-            Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
-                public void run() {
-                    terminating.set(true);
-                    try {
-                        statsSemaphore.acquire();
-                    } catch (InterruptedException ignored) {
-                        // ignore as we are terminating
+            TxUtils.begin();
+            try {
+                Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+                    public void run() {
+                        terminating.set(true);
+                        try {
+                            statsSemaphore.acquire();
+                        } catch (InterruptedException ignored) {
+                            // ignore as we are terminating
+                        }
+                        stats.dumpStats();
                     }
-                    stats.dumpStats();
+                }));
+
+                if (!terminating.get()) {
+                    try (Producer queueProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
+                        queueProducer.start();
+
+                        try (Consumer queueConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
+                            queueConsumer.start();
+
+                            int msgsCounter;
+
+                            // drain queues
+                            Collection<DestinationHandle> queues = queueConsumer.getJMX().queues();
+                            log.info("Found queues: {}", queues);
+                            for (DestinationHandle handle : queues) {
+                                if (terminating.get()) {
+                                    break;
+                                }
+                                msgsCounter = 0;
+                                String queue = queueConsumer.getJMX().queueName(handle);
+                                log.info("Processing queue: '{}'", queue);
+                                stats.setSize(queue, queueConsumer.currentQueueSize(handle));
+                                Producer.ProducerProcessor processor = queueProducer.processQueueMessages(queue);
+                                Iterator<Message> iter = queueConsumer.consumeQueue(handle, queue);
+                                while (iter.hasNext() && !terminating.get()) {
+                                    Message next = iter.next();
+                                    processor.processMessage(next);
+                                    msgsCounter++;
+                                    stats.increment(queue);
+                                }
+                                log.info("Handled {} messages for queue '{}'.", msgsCounter, queue);
+                            }
+                        }
+                    }
                 }
-            }));
 
-            if (!terminating.get()) {
-                try (Producer queueProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
-                    queueProducer.start();
-
-                    try (Consumer queueConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
-                        queueConsumer.start();
-
+                if (!terminating.get()) {
+                    try (Consumer dtsConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
                         int msgsCounter;
-
-                        // drain queues
-                        Collection<DestinationHandle> queues = queueConsumer.getJMX().queues();
-                        log.info("Found queues: {}", queues);
-                        for (DestinationHandle handle : queues) {
+                        // drain durable topic subscribers
+                        Set<String> ids = new HashSet<>();
+                        Collection<DestinationHandle> subscribers = dtsConsumer.getJMX().durableTopicSubscribers();
+                        log.info("Found durable topic subscribers: {}", subscribers);
+                        for (DestinationHandle handle : subscribers) {
                             if (terminating.get()) {
                                 break;
                             }
                             msgsCounter = 0;
-                            String queue = queueConsumer.getJMX().queueName(handle);
-                            log.info("Processing queue: '{}'", queue);
-                            stats.setSize(queue, queueConsumer.currentQueueSize(handle));
-                            Producer.ProducerProcessor processor = queueProducer.processQueueMessages(queue);
-                            Iterator<Message> iter = queueConsumer.consumeQueue(handle, queue);
-                            while (iter.hasNext() && !terminating.get()) {
-                                Message next = iter.next();
-                                processor.processMessage(next);
-                                msgsCounter++;
-                                stats.increment(queue);
-                            }
-                            log.info("Handled {} messages for queue '{}'.", msgsCounter, queue);
-                        }
-                    }
-                }
-            }
+                            DTSTuple tuple = dtsConsumer.getJMX().dtsTuple(handle);
+                            try (Producer dtsProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
+                                dtsProducer.start(tuple.clientId);
 
-            if (!terminating.get()) {
-                try (Consumer dtsConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
-                    int msgsCounter;
-                    // drain durable topic subscribers
-                    Set<String> ids = new HashSet<>();
-                    Collection<DestinationHandle> subscribers = dtsConsumer.getJMX().durableTopicSubscribers();
-                    log.info("Found durable topic subscribers: {}", subscribers);
-                    for (DestinationHandle handle : subscribers) {
-                        if (terminating.get()) {
-                            break;
-                        }
-                        msgsCounter = 0;
-                        DTSTuple tuple = dtsConsumer.getJMX().dtsTuple(handle);
-                        try (Producer dtsProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
-                            dtsProducer.start(tuple.clientId);
+                                dtsProducer.getTopicSubscriber(tuple.topic, tuple.subscriptionName).close(); // just create dts on producer-side
 
-                            dtsProducer.getTopicSubscriber(tuple.topic, tuple.subscriptionName).close(); // just create dts on producer-side
-
-                            Producer.ProducerProcessor processor = dtsProducer.processTopicMessages(tuple.topic);
-                            dtsConsumer.getJMX().disconnect(tuple.clientId);
-                            dtsConsumer.start(tuple.clientId);
-                            try {
-                                log.info("Processing topic subscriber : '{}' [{}]", tuple.topic, tuple.subscriptionName);
-                                stats.setSize(tuple.topic + "/" + tuple.subscriptionName, dtsConsumer.currentTopicSubscriptionSize(handle));
-                                Iterator<Message> iter = dtsConsumer.consumeDurableTopicSubscriptions(handle, tuple.topic, tuple.subscriptionName);
-                                while (iter.hasNext() && !terminating.get()) {
-                                    Message next = iter.next();
-                                    if (ids.add(next.getJMSMessageID())) {
-                                        processor.processMessage(next);
-                                        msgsCounter++;
-                                        stats.increment(tuple.topic + "/" + tuple.subscriptionName);
+                                Producer.ProducerProcessor processor = dtsProducer.processTopicMessages(tuple.topic);
+                                dtsConsumer.getJMX().disconnect(tuple.clientId);
+                                dtsConsumer.start(tuple.clientId);
+                                try {
+                                    log.info("Processing topic subscriber : '{}' [{}]", tuple.topic, tuple.subscriptionName);
+                                    stats.setSize(tuple.topic + "/" + tuple.subscriptionName, dtsConsumer.currentTopicSubscriptionSize(handle));
+                                    Iterator<Message> iter = dtsConsumer.consumeDurableTopicSubscriptions(handle, tuple.topic, tuple.subscriptionName);
+                                    while (iter.hasNext() && !terminating.get()) {
+                                        Message next = iter.next();
+                                        if (ids.add(next.getJMSMessageID())) {
+                                            processor.processMessage(next);
+                                            msgsCounter++;
+                                            stats.increment(tuple.topic + "/" + tuple.subscriptionName);
+                                        }
                                     }
+                                    log.info("Handled {} messages for topic subscriber '{}' [{}].", msgsCounter, tuple.topic, tuple.subscriptionName);
+                                } finally {
+                                    //noinspection ThrowFromFinallyBlock
+                                    dtsConsumer.close();
                                 }
-                                log.info("Handled {} messages for topic subscriber '{}' [{}].", msgsCounter, tuple.topic, tuple.subscriptionName);
-                            } finally {
-                                //noinspection ThrowFromFinallyBlock
-                                dtsConsumer.close();
                             }
                         }
+                        log.info("Consumed {} messages.", ids.size());
                     }
-                    log.info("Consumed {} messages.", ids.size());
                 }
-            }
 
-            TxUtils.commit();
+                TxUtils.commit();
 
-            if (!terminating.get()) {
-                log.info("-- [CE] A-MQ migration finished. --");
+                if (!terminating.get()) {
+                    log.info("-- [CE] A-MQ migration finished. --");
+                }
+            } finally {
+                TxUtils.end();
+
+                statsSemaphore.release();
             }
         } finally {
-            TxUtils.end();
-
-            statsSemaphore.release();
+            TxUtils.shutdown();
         }
     }
 }

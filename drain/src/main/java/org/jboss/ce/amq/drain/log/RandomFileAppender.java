@@ -4,6 +4,7 @@ import java.security.SecureRandom;
 import java.util.Random;
 
 import org.apache.log4j.FileAppender;
+import org.jboss.ce.amq.drain.Utils;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
@@ -11,7 +12,7 @@ import org.apache.log4j.FileAppender;
 public class RandomFileAppender extends FileAppender {
     private static final Random RANDOM = new SecureRandom();
 
-    private String baseDir = "/opt/amq/data/";
+    private String baseDir = Utils.getSystemPropertyOrEnvVar("log.file.dir", "/opt/amq/data/");
 
     @Override
     public void activateOptions() {

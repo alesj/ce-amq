@@ -94,6 +94,11 @@ public class TxUtils {
         }
     }
 
+    public static void shutdown() {
+//        RecoveryManager.manager().terminate();
+//        TransactionReaper.terminate(false);
+    }
+
     static class XAConnectionFactoryOnly implements XAConnectionFactory {
         private final XAConnectionFactory connectionFactory;
 

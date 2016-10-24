@@ -63,31 +63,33 @@ public class Consumer extends Client {
     }
 
     public int currentQueueSize(DestinationHandle handle) throws Exception {
-        return getJMX().getAttribute(Number.class, handle, "QueueSize").intValue();
+        return getInt(handle, "QueueSize");
     }
 
-    public Iterator<Message> consumeQueue(DestinationHandle handle, String queueName) throws JMSException {
+    public Iterator<Message> consumeQueue(DestinationHandle handle, String queueName) throws Exception {
         final Queue queue = createQueue(queueName);
-        return consumeMessages(queue, handle, "QueueSize");
+        return consumeMessages(queue, new SizeChecker(handle, "QueueSize"));
     }
 
     public Iterator<Message> consumeDurableTopicSubscriptions(DestinationHandle handle, String topicName, String subscriptionName) throws Exception {
-        int pendingQueueSize = getJMX().getAttribute(Number.class, handle, "PendingQueueSize").intValue();
         TopicSubscriber subscriber = getTopicSubscriber(topicName, subscriptionName);
-        return consumeMessages(subscriber, new PendingQueueSizeChecker(pendingQueueSize));
+        return consumeMessages(subscriber, new SizeChecker(handle, "PendingQueueSize"));
     }
 
     public int currentTopicSubscriptionSize(DestinationHandle handle) throws Exception {
-        return getJMX().getAttribute(Number.class, handle, "PendingQueueSize").intValue();
+        return getInt(handle, "PendingQueueSize");
     }
 
     private Iterator<Message> consumeMessages(Destination destination, final DestinationHandle handle, final String attributeName) throws JMSException {
-        final MessageConsumer consumer = getSession().createConsumer(destination);
-        return consumeMessages(consumer, new NextChecker() {
+        return consumeMessages(destination, new NextChecker() {
             public boolean hasNext() throws Exception {
                 return getJMX().hasNextMessage(handle, attributeName);
             }
         });
+    }
+
+    private Iterator<Message> consumeMessages(final Destination destination, final NextChecker checker) throws JMSException {
+        return consumeMessages(getSession().createConsumer(destination), checker);
     }
 
     private Iterator<Message> consumeMessages(final MessageConsumer consumer, final NextChecker checker) throws JMSException {
@@ -113,15 +115,20 @@ public class Consumer extends Client {
         };
     }
 
+    private int getInt(DestinationHandle handle, String attributeName) throws Exception {
+        Number x = getJMX().getAttribute(Number.class, handle, attributeName);
+        return (x != null ? x.intValue() : 0);
+    }
+
     private interface NextChecker {
         boolean hasNext() throws Exception;
     }
 
-    private static class PendingQueueSizeChecker implements NextChecker {
+    private class SizeChecker implements NextChecker {
         private int size;
 
-        public PendingQueueSizeChecker(int size) {
-            this.size = size;
+        public SizeChecker(DestinationHandle handle, String attributeName) throws Exception {
+            size = getInt(handle, attributeName);
         }
 
         public boolean hasNext() throws Exception {
