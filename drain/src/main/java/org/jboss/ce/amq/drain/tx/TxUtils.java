@@ -27,9 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.jms.ConnectionFactory;
-import javax.jms.JMSException;
-import javax.jms.XAConnection;
-import javax.jms.XAConnectionFactory;
 import javax.transaction.Status;
 import javax.transaction.SystemException;
 import javax.transaction.TransactionManager;
@@ -40,16 +37,15 @@ import com.arjuna.ats.arjuna.recovery.RecoveryManager;
 import com.arjuna.ats.jta.common.JTAEnvironmentBean;
 import com.arjuna.ats.jta.recovery.XAResourceRecovery;
 import com.arjuna.common.internal.util.propertyservice.BeanPopulator;
-import org.apache.activemq.ActiveMQXAConnectionFactory;
-import org.apache.activemq.jms.pool.XaPooledConnectionFactory;
 import org.jboss.ce.amq.drain.BrokerConfig;
 import org.jboss.ce.amq.drain.Utils;
+import org.jboss.ce.amq.drain.jms.CustomXAConnectionFactoryAdapter;
+import org.jboss.ce.amq.drain.jms.XAPooledConnectionFactoryAdapter;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 public class TxUtils {
-    private static final List<XaPooledConnectionFactory> FACTORIES = new ArrayList<>();
 
     public static void init(BrokerConfig... brokerConfigs) {
         BeanPopulator.getDefaultInstance(ObjectStoreEnvironmentBean.class).setObjectStoreDir(Utils.getSystemPropertyOrEnvVar("recovery.store.dir", "/opt/amq/data/recovery"));
@@ -63,17 +59,13 @@ public class TxUtils {
         BeanPopulator.getDefaultInstance(JTAEnvironmentBean.class).setXaResourceRecoveries(recoveryClassNames);
     }
 
-    private static TransactionManager getTransactionManager() {
+    public static TransactionManager getTransactionManager() {
         return com.arjuna.ats.jta.TransactionManager.transactionManager();
     }
 
-    public synchronized static ConnectionFactory createXAConnectionFactory(String url) {
-        // we don't need pool explicity, but it already has all the XA code needed
-        XaPooledConnectionFactory factory = new XaPooledConnectionFactory();
-        factory.setTransactionManager(TxUtils.getTransactionManager());
-        factory.setConnectionFactory(new XAConnectionFactoryOnly(new ActiveMQXAConnectionFactory(url)));
-        FACTORIES.add(factory);
-        return factory;
+    public static ConnectionFactory createXAConnectionFactory(String url) throws Exception {
+        return CustomXAConnectionFactoryAdapter.INSTANCE.createFactory(url);
+        // return XAPooledConnectionFactoryAdapter.getInstance().createFactory(url);
     }
 
     public static boolean isTxActive() {
@@ -99,25 +91,6 @@ public class TxUtils {
     }
 
     public synchronized static void shutdown() {
-        for (XaPooledConnectionFactory factory : FACTORIES) {
-            factory.stop();
-        }
-        FACTORIES.clear();
-    }
-
-    static class XAConnectionFactoryOnly implements XAConnectionFactory {
-        private final XAConnectionFactory connectionFactory;
-
-        XAConnectionFactoryOnly(XAConnectionFactory connectionFactory) {
-            this.connectionFactory = connectionFactory;
-        }
-
-        public XAConnection createXAConnection() throws JMSException {
-            return connectionFactory.createXAConnection();
-        }
-
-        public XAConnection createXAConnection(String username, String password) throws JMSException {
-            return connectionFactory.createXAConnection(username, password);
-        }
+        XAPooledConnectionFactoryAdapter.getInstance().shutdown();
     }
 }

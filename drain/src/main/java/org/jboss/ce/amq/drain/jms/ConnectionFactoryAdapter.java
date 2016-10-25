@@ -24,11 +24,10 @@
 package org.jboss.ce.amq.drain.jms;
 
 import javax.jms.ConnectionFactory;
-import javax.jms.JMSException;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-interface ConnectionFactoryAdapter {
-    ConnectionFactory createFactory(String url) throws JMSException;
+public interface ConnectionFactoryAdapter {
+    ConnectionFactory createFactory(String url) throws Exception;
 }

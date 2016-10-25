@@ -23,16 +23,30 @@
 
 package org.jboss.ce.amq.drain.jms;
 
-import javax.jms.ConnectionFactory;
-import javax.jms.JMSException;
+import javax.jms.Connection;
 
-import org.jboss.ce.amq.drain.tx.TxUtils;
+import org.apache.activemq.ActiveMQConnection;
+import org.apache.activemq.jms.pool.PooledConnection;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-class XAConnectionFactoryAdapter implements ConnectionFactoryAdapter {
-    public ConnectionFactory createFactory(String url) throws JMSException {
-        return TxUtils.createXAConnectionFactory(url);
+class Cleaner {
+    static void cleanupConnection(Connection connection) throws Exception {
+        if (connection == null) {
+            return;
+        }
+
+        if (connection instanceof ActiveMQConnection) {
+            ActiveMQConnection amc = (ActiveMQConnection) connection;
+            amc.cleanup();
+        } else if (connection instanceof PooledConnection) {
+            PooledConnection pc = (PooledConnection) connection;
+            try {
+                cleanupConnection(pc.getConnection());
+            } finally {
+                pc.close(); // whack sessions
+            }
+        }
     }
 }

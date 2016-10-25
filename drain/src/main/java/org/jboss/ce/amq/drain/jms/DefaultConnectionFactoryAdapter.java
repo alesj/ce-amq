@@ -24,7 +24,6 @@
 package org.jboss.ce.amq.drain.jms;
 
 import javax.jms.ConnectionFactory;
-import javax.jms.JMSException;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 
@@ -32,7 +31,9 @@ import org.apache.activemq.ActiveMQConnectionFactory;
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 class DefaultConnectionFactoryAdapter implements ConnectionFactoryAdapter {
-    public ConnectionFactory createFactory(String url) throws JMSException {
+    public static final ConnectionFactoryAdapter INSTANCE = new DefaultConnectionFactoryAdapter();
+
+    public ConnectionFactory createFactory(String url) throws Exception {
         return new ActiveMQConnectionFactory(url);
     }
 }

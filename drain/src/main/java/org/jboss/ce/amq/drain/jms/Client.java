@@ -85,15 +85,14 @@ public abstract class Client implements Closeable {
         return session;
     }
 
-    protected ConnectionFactoryAdapter getConnectionFactoryAdapter() {
-        boolean isXA = TxUtils.isTxActive();
-        return (isXA ? new XAConnectionFactoryAdapter() : new DefaultConnectionFactoryAdapter());
-    }
-
     protected void init(Connection connection) throws JMSException {
         if (clientId != null) {
             connection.setClientID(clientId);
         }
+    }
+
+    public void cleanup() throws Exception {
+        Cleaner.cleanupConnection(connection);
     }
 
     public void close() throws IOException {
@@ -109,20 +108,20 @@ public abstract class Client implements Closeable {
         }
     }
 
-    public void start(String clientId) throws JMSException {
+    public void start(String clientId) throws Exception {
         this.clientId = clientId;
         start();
     }
 
-    public void start() throws JMSException {
-        ConnectionFactory cf = getConnectionFactoryAdapter().createFactory(url);
+    public void start() throws Exception {
+        ConnectionFactory cf = (TxUtils.isTxActive() ? TxUtils.createXAConnectionFactory(url) : DefaultConnectionFactoryAdapter.INSTANCE.createFactory(url));
         connection = (username != null && password != null) ? cf.createConnection(username, password) : cf.createConnection();
         init(connection);
         session = connection.createSession(transacted, mode);
         connection.start();
     }
 
-    public void stop() throws JMSException {
+    public void stop() throws Exception {
         if (connection == null) {
             throw new IllegalStateException("No start invoked?");
         }
