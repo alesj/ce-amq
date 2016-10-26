@@ -66,7 +66,7 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
         this.remoteBroker = remoteBroker;
     }
 
-    public XAResource getXAResource() throws SQLException {
+    public synchronized XAResource getXAResource() throws SQLException {
         String url = urls.get(index++);
         return (XAResource) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{XAResource.class}, new XAResourceProxyHandler(url));
     }
@@ -81,7 +81,14 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
             urls.add(localUrl);
             fillUrls();
         }
-        return (index < urls.size());
+        if (index < urls.size()) {
+            return true;
+        } else {
+            // reset
+            urls = null;
+            index = 0;
+            return false;
+        }
     }
 
     private void fillUrls() {
