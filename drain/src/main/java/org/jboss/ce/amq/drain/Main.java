@@ -54,6 +54,12 @@ public class Main {
     private String producerUsername = Utils.getSystemPropertyOrEnvVar("producer.username", Utils.getSystemPropertyOrEnvVar("amq.user"));
     private String producerPassword = Utils.getSystemPropertyOrEnvVar("producer.password", Utils.getSystemPropertyOrEnvVar("amq.password"));
 
+    //private int msgsBatchSize = Integer.parseInt(Utils.getSystemPropertyOrEnvVar("msgs.batch.size", "1000"));
+    private boolean migrateDTS = Boolean.parseBoolean(Utils.getSystemPropertyOrEnvVar("migrate.dts"));
+
+    private final AtomicBoolean terminating = new AtomicBoolean();
+    private final Stats stats = new Stats();
+
     public static void main(String[] args) {
         try {
             Main main = new Main();
@@ -110,7 +116,6 @@ public class Main {
             return;
         }
 
-        final AtomicBoolean terminating = new AtomicBoolean();
         final Semaphore statsSemaphore = new Semaphore(0);
 
         final Stats stats = new Stats();
@@ -134,119 +139,11 @@ public class Main {
 
             try {
                 if (!terminating.get()) {
-                    try (Producer queueProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
-                        try (Consumer queueConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
-                            int msgsCounter;
+                    handleQueues();
+                }
 
-                            // drain queues
-                            Collection<DestinationHandle> queues = queueConsumer.getJMX().queues();
-                            log.info("Found queues: {}", queues);
-                            for (DestinationHandle handle : queues) {
-                                try {
-                                    TxUtils.begin(); // more fine-grained tx ... perhaps handle queue in parallel?
-                                    try {
-                                        if (terminating.get()) {
-                                            break;
-                                        }
-
-                                        queueProducer.start();
-                                        queueConsumer.start();
-
-                                        msgsCounter = 0;
-                                        String queue = queueConsumer.getJMX().queueName(handle);
-                                        log.info("Processing queue: '{}'", queue);
-                                        stats.setSize(queue, queueConsumer.currentQueueSize(handle));
-                                        Producer.ProducerProcessor processor = queueProducer.processQueueMessages(queue);
-                                        Iterator<Message> iter = queueConsumer.consumeQueue(handle, queue);
-                                        while (iter.hasNext() && !terminating.get()) {
-                                            Message next = iter.next();
-                                            processor.processMessage(next);
-                                            msgsCounter++;
-                                            stats.increment(queue);
-                                        }
-                                        log.info("Handled {} messages for queue '{}'.", msgsCounter, queue);
-                                        TxUtils.commit();
-                                    } finally {
-                                        TxUtils.end();
-                                    }
-                                } finally {
-                                    queueConsumer.cleanup();
-                                    queueProducer.cleanup();
-                                }
-                            }
-                        }
-                    }
-
-
-                    if (!terminating.get()) {
-                        try (Consumer dtsConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
-                            try (Producer dtsProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
-
-                                Collection<DestinationHandle> subscribers = dtsConsumer.getJMX().durableTopicSubscribers();
-                                log.info("Found durable topic subscribers: {}", subscribers);
-
-                                // first create dts on producer-side -- so we don't miss any msgs (no need for tx?)
-                                for (DestinationHandle handle : subscribers) {
-                                    if (terminating.get()) {
-                                        break;
-                                    }
-
-                                    DTSTuple tuple = dtsConsumer.getJMX().dtsTuple(handle);
-
-                                    dtsProducer.start(tuple.clientId);
-                                    try {
-                                        dtsProducer.getTopicSubscriber(tuple.topic, tuple.subscriptionName).close();
-                                    } finally {
-                                        dtsProducer.close(); //no tx, we have plain connection, hence close
-                                    }
-                                }
-
-                                int msgsCounter;
-                                // drain durable topic subscribers
-                                Set<String> ids = new HashSet<>();
-                                for (DestinationHandle handle : subscribers) {
-                                    try {
-                                        TxUtils.begin();
-                                        try {
-                                            if (terminating.get()) {
-                                                break;
-                                            }
-
-                                            msgsCounter = 0;
-                                            DTSTuple tuple = dtsConsumer.getJMX().dtsTuple(handle);
-
-                                            dtsProducer.start(tuple.clientId);
-                                            Producer.ProducerProcessor processor = dtsProducer.processTopicMessages(tuple.topic);
-
-                                            dtsConsumer.getJMX().disconnect(tuple.clientId);
-                                            dtsConsumer.start(tuple.clientId);
-                                            log.info("Processing topic subscriber : '{}' [{}]", tuple.topic, tuple.subscriptionName);
-                                            stats.setSize(tuple.topic + "/" + tuple.subscriptionName, dtsConsumer.currentTopicSubscriptionSize(handle));
-                                            Iterator<Message> iter = dtsConsumer.consumeDurableTopicSubscriptions(handle, tuple.topic, tuple.subscriptionName);
-                                            while (iter.hasNext() && !terminating.get()) {
-                                                Message next = iter.next();
-                                                if (ids.add(next.getJMSMessageID())) {
-                                                    processor.processMessage(next);
-                                                    msgsCounter++;
-                                                    stats.increment(tuple.topic + "/" + tuple.subscriptionName);
-                                                }
-                                            }
-                                            log.info("Handled {} messages for topic subscriber '{}' [{}].", msgsCounter, tuple.topic, tuple.subscriptionName);
-
-                                            TxUtils.commit();
-                                        } finally {
-                                            TxUtils.end();
-                                        }
-                                    } finally {
-                                        // do cleanup after each clientID
-                                        dtsConsumer.cleanup();
-                                        dtsProducer.cleanup();
-                                    }
-                                }
-                                log.info("Consumed {} messages.", ids.size());
-                            }
-                        }
-                    }
+                if (migrateDTS && !terminating.get()) {
+                    handleDurableTopicSubscribers();
                 }
 
                 if (!terminating.get()) {
@@ -257,6 +154,116 @@ public class Main {
             }
         } finally {
             TxUtils.shutdown();
+        }
+    }
+
+    private void handleQueues() throws Exception {
+        try (Producer queueProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
+            try (Consumer queueConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
+                int msgsCounter;
+
+                // drain queues
+                Collection<DestinationHandle> queues = queueConsumer.getJMX().queues();
+                log.info("Found queues: {}", queues);
+                for (DestinationHandle handle : queues) {
+                    try {
+                        TxUtils.begin(); // more fine-grained tx ... perhaps handle queue in parallel?
+                        if (terminating.get()) {
+                            break;
+                        }
+
+                        queueProducer.start();
+                        queueConsumer.start();
+
+                        msgsCounter = 0;
+                        String queue = queueConsumer.getJMX().queueName(handle);
+                        log.info("Processing queue: '{}'", queue);
+                        stats.setSize(queue, queueConsumer.currentQueueSize(handle));
+                        Producer.ProducerProcessor processor = queueProducer.processQueueMessages(queue);
+                        Iterator<Message> iter = queueConsumer.consumeQueue(handle, queue);
+                        while (iter.hasNext() && !terminating.get()) {
+                            Message next = iter.next();
+                            processor.processMessage(next);
+                            msgsCounter++;
+                            stats.increment(queue);
+                        }
+                        log.info("Handled {} messages for queue '{}'.", msgsCounter, queue);
+                        TxUtils.commit();
+                    } finally {
+                        TxUtils.end();
+                    }
+                }
+            }
+        }
+    }
+
+    private void handleDurableTopicSubscribers() throws Exception {
+        try (Consumer dtsConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
+            try (Producer dtsProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
+
+                Collection<DestinationHandle> subscribers = dtsConsumer.getJMX().durableTopicSubscribers();
+                log.info("Found durable topic subscribers: {}", subscribers);
+
+                // first create dts on producer-side -- so we don't miss any msgs (no need for tx?)
+                for (DestinationHandle handle : subscribers) {
+                    if (terminating.get()) {
+                        break;
+                    }
+
+                    DTSTuple tuple = dtsConsumer.getJMX().dtsTuple(handle);
+
+                    dtsProducer.start(tuple.clientId);
+                    try {
+                        dtsProducer.getTopicSubscriber(tuple.topic, tuple.subscriptionName).close();
+                    } finally {
+                        dtsProducer.close(); //no tx, we have plain connection, hence close
+                    }
+                }
+
+                int msgsCounter;
+                // drain durable topic subscribers
+                Set<String> ids = new HashSet<>();
+                for (DestinationHandle handle : subscribers) {
+                    try {
+                        TxUtils.begin();
+                        try {
+                            if (terminating.get()) {
+                                break;
+                            }
+
+                            msgsCounter = 0;
+                            DTSTuple tuple = dtsConsumer.getJMX().dtsTuple(handle);
+
+                            dtsProducer.start(tuple.clientId);
+                            Producer.ProducerProcessor processor = dtsProducer.processTopicMessages(tuple.topic);
+
+                            dtsConsumer.getJMX().disconnect(tuple.clientId);
+                            dtsConsumer.start(tuple.clientId);
+                            log.info("Processing topic subscriber : '{}' [{}]", tuple.topic, tuple.subscriptionName);
+                            stats.setSize(tuple.topic + "/" + tuple.subscriptionName, dtsConsumer.currentTopicSubscriptionSize(handle));
+                            Iterator<Message> iter = dtsConsumer.consumeDurableTopicSubscriptions(handle, tuple.topic, tuple.subscriptionName);
+                            while (iter.hasNext() && !terminating.get()) {
+                                Message next = iter.next();
+                                if (ids.add(next.getJMSMessageID())) {
+                                    processor.processMessage(next);
+                                    msgsCounter++;
+                                    stats.increment(tuple.topic + "/" + tuple.subscriptionName);
+                                }
+                            }
+                            log.info("Handled {} messages for topic subscriber '{}' [{}].", msgsCounter, tuple.topic, tuple.subscriptionName);
+
+                            TxUtils.commit();
+                        } finally {
+                            TxUtils.end();
+                        }
+                    } finally {
+                        // do cleanup after each clientID
+                        dtsConsumer.cleanup();
+                        dtsProducer.cleanup();
+                    }
+                }
+                log.info("Consumed {} messages.", ids.size());
+            }
         }
     }
 }

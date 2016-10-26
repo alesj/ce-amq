@@ -29,7 +29,8 @@ import org.jboss.ce.amq.drain.Utils;
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 public abstract class TestBase {
-    static final String QUEUE = Utils.getSystemPropertyOrEnvVar("test.queue", "QUEUES.FOO");
+    static final String QUEUE1 = Utils.getSystemPropertyOrEnvVar("test.queue1", "QUEUES1.FOO");
+    static final String QUEUE2 = Utils.getSystemPropertyOrEnvVar("test.queue2", "QUEUES2.FOO");
     static final String TOPIC = Utils.getSystemPropertyOrEnvVar("test.topic", "TOPICS.FOO");
     static final String SUBSCRIPTION_NAME = Utils.getSystemPropertyOrEnvVar("test.subscription", "BAR");
 }

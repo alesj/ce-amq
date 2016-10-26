@@ -36,4 +36,7 @@ class DefaultConnectionFactoryAdapter implements ConnectionFactoryAdapter {
     public ConnectionFactory createFactory(String url) throws Exception {
         return new ActiveMQConnectionFactory(url);
     }
+
+    public void shutdown() {
+    }
 }

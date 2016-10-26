@@ -23,13 +23,21 @@
 
 package org.jboss.ce.amq.drain.jms;
 
-import javax.jms.ConnectionFactory;
+import org.jboss.ce.amq.drain.tx.TxUtils;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public interface ConnectionFactoryAdapter {
-    ConnectionFactory createFactory(String url) throws Exception;
+public class ConnectionFactoryAdapterFactory {
+    public static ConnectionFactoryAdapter create() {
+        return (TxUtils.isTxActive() ? createXA() : DefaultConnectionFactoryAdapter.INSTANCE);
+    }
 
-    void shutdown() throws Exception;
+    public static ConnectionFactoryAdapter createXA() {
+        return XAPooledConnectionFactoryAdapter.INSTANCE;
+    }
+
+    public static void shutdown() throws Exception {
+        XAPooledConnectionFactoryAdapter.INSTANCE.shutdown();
+    }
 }

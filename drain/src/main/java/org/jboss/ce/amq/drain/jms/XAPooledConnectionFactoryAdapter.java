@@ -23,9 +23,6 @@
 
 package org.jboss.ce.amq.drain.jms;
 
-import java.util.HashMap;
-import java.util.Map;
-
 import javax.jms.ConnectionFactory;
 import javax.jms.JMSException;
 import javax.jms.XAConnection;
@@ -38,35 +35,21 @@ import org.jboss.ce.amq.drain.tx.TxUtils;
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public class XAPooledConnectionFactoryAdapter implements ConnectionFactoryAdapter {
-    private static XAPooledConnectionFactoryAdapter INSTANCE;
+public class XAPooledConnectionFactoryAdapter extends MapConnectionFactoryAdapter {
+    public static final ConnectionFactoryAdapter INSTANCE = new XAPooledConnectionFactoryAdapter();
 
-    private final Map<String, XaPooledConnectionFactory> factories = new HashMap<>();
-
-    public synchronized static XAPooledConnectionFactoryAdapter getInstance() {
-        if (INSTANCE == null) {
-            INSTANCE = new XAPooledConnectionFactoryAdapter();
-        }
-        return INSTANCE;
+    private XAPooledConnectionFactoryAdapter() {
     }
 
-    public synchronized ConnectionFactory createFactory(String url) throws Exception {
-        // we don't need pool explicity, but it already has all the XA code needed
-        XaPooledConnectionFactory factory = factories.get(url);
-        if (factory == null) {
-            factory = new XaPooledConnectionFactory();
-            factory.setTransactionManager(TxUtils.getTransactionManager());
-            factory.setConnectionFactory(new XAConnectionFactoryOnly(new ActiveMQXAConnectionFactory(url)));
-            factories.put(url, factory);
-        }
+    protected ConnectionFactory createFactoryInternal(String url) throws Exception {
+        XaPooledConnectionFactory factory = new XaPooledConnectionFactory();
+        factory.setTransactionManager(TxUtils.getTransactionManager());
+        factory.setConnectionFactory(new XAConnectionFactoryOnly(new ActiveMQXAConnectionFactory(url)));
         return factory;
     }
 
-    public synchronized void shutdown() {
-        for (XaPooledConnectionFactory factory : factories.values()) {
-            factory.stop();
-        }
-        factories.clear();
+    protected void shutdown(ConnectionFactory factory) {
+        XaPooledConnectionFactory.class.cast(factory).stop();
     }
 
     static class XAConnectionFactoryOnly implements XAConnectionFactory {

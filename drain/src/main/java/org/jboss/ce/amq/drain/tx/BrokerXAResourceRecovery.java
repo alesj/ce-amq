@@ -26,7 +26,11 @@ package org.jboss.ce.amq.drain.tx;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.net.InetAddress;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.logging.Logger;
 
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
@@ -35,25 +39,36 @@ import javax.jms.XAConnection;
 import javax.transaction.xa.XAResource;
 
 import com.arjuna.ats.jta.recovery.XAResourceRecovery;
+import org.jboss.ce.amq.drain.BrokerConfig;
+import org.jboss.ce.amq.drain.Utils;
+import org.jboss.ce.amq.drain.jms.ConnectionFactoryAdapterFactory;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 class BrokerXAResourceRecovery implements XAResourceRecovery {
-    private String url;
+    private static final Logger log = Logger.getLogger(BrokerXAResourceRecovery.class.getName());
+
+    private String localUrl;
     private String username;
     private String password;
 
-    private boolean checked;
+    private final BrokerConfig remoteBroker;
 
-    public BrokerXAResourceRecovery(String url, String username, String password) {
-        this.url = url;
-        this.username = username;
-        this.password = password;
+    private int index;
+    private List<String> urls;
+    private int port = Integer.parseInt(Utils.getSystemPropertyOrEnvVar("amq.tcp.port", "61616"));
+
+    public BrokerXAResourceRecovery(BrokerConfig localBroker, BrokerConfig remoteBroker) {
+        this.localUrl = localBroker.getUrl();
+        this.username = localBroker.getUsername();
+        this.password = localBroker.getPassword();
+        this.remoteBroker = remoteBroker;
     }
 
     public XAResource getXAResource() throws SQLException {
-        return (XAResource) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{XAResource.class}, new XAResourceProxyHandler());
+        String url = urls.get(index++);
+        return (XAResource) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{XAResource.class}, new XAResourceProxyHandler(url));
     }
 
     public boolean initialise(String p) throws SQLException {
@@ -61,18 +76,45 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
     }
 
     public synchronized boolean hasMoreResources() {
-        if (!checked) {
-            checked = true;
-            return true;
-        } else {
-            return false;
+        if (urls == null) {
+            urls = new ArrayList<>();
+            urls.add(localUrl);
+            fillUrls();
+        }
+        return (index < urls.size());
+    }
+
+    private void fillUrls() {
+        String serviceName = Utils.getSystemPropertyOrEnvVar("amq.headless.service");
+        if (serviceName == null) {
+            String appName = Utils.getSystemPropertyOrEnvVar("application.name");
+            if (appName == null) {
+                log.warning("No application.name var found, using remote broker for testing!");
+                urls.add(remoteBroker.getUrl()); // for testing purposes
+            } else {
+                serviceName = Utils.getSystemPropertyOrEnvVar(appName + ".amq.headless");
+            }
+        }
+        try {
+            InetAddress[] ias = InetAddress.getAllByName(serviceName);
+            for (InetAddress ia : ias) {
+                urls.add(ia.getHostAddress() + ":" + port); // TODO -- port!?
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
         }
     }
 
     private class XAResourceProxyHandler implements InvocationHandler {
+        private String url;
+
+        public XAResourceProxyHandler(String url) {
+            this.url = url;
+        }
+
         public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
             try {
-                ConnectionFactory cf = TxUtils.createXAConnectionFactory(url);
+                ConnectionFactory cf = ConnectionFactoryAdapterFactory.createXA().createFactory(url);
                 Connection connection = (username != null && password != null) ? cf.createConnection(username, password) : cf.createConnection();
                 try {
                     if (connection instanceof XAConnection) {

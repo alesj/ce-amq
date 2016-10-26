@@ -24,7 +24,7 @@
 package org.jboss.ce.amq.drain;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
@@ -36,8 +36,8 @@ import org.slf4j.LoggerFactory;
 class Stats {
     private static final Logger log = LoggerFactory.getLogger(Stats.class);
 
-    private Map<String, Integer> sizes = new ConcurrentHashMap<>();
-    private Map<String, AtomicInteger> counters = new ConcurrentHashMap<>();
+    private Map<String, Integer> sizes = new ConcurrentSkipListMap<>();
+    private Map<String, AtomicInteger> counters = new ConcurrentSkipListMap<>();
 
     void setSize(String destination, int size) {
         sizes.put(destination, size);

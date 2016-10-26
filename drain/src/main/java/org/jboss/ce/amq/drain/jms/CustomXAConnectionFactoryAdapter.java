@@ -41,11 +41,18 @@ import org.jboss.ce.amq.drain.tx.TxUtils;
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public class CustomXAConnectionFactoryAdapter implements ConnectionFactoryAdapter {
+public class CustomXAConnectionFactoryAdapter extends MapConnectionFactoryAdapter {
     public static final ConnectionFactoryAdapter INSTANCE = new CustomXAConnectionFactoryAdapter();
 
-    public synchronized ConnectionFactory createFactory(String url) throws Exception {
+    private CustomXAConnectionFactoryAdapter() {
+    }
+
+    protected synchronized ConnectionFactory createFactoryInternal(String url) throws Exception {
         return new CustomActiveMQXAConnectionFactory(url);
+    }
+
+    protected void shutdown(ConnectionFactory factory) throws JMSException {
+        CustomActiveMQXAConnectionFactory.class.cast(factory).shutdown();
     }
 
     private static class CustomActiveMQXAConnectionFactory extends ActiveMQXAConnectionFactory {
@@ -57,10 +64,13 @@ public class CustomXAConnectionFactoryAdapter implements ConnectionFactoryAdapte
         }
 
         @Override
-        protected ActiveMQConnection createActiveMQConnection(Transport transport, JMSStatsImpl stats) throws Exception {
+        protected synchronized ActiveMQConnection createActiveMQConnection(Transport transport, JMSStatsImpl stats) throws Exception {
             ActiveMQXAConnection connection = new CustomActiveMQXAConnection(transport, getClientIdGenerator(), getConnectionIdGenerator(), stats);
             connection.setXaAckMode(xaAckMode);
             return connection;
+        }
+
+        private void shutdown() throws JMSException {
         }
     }
 
@@ -83,9 +93,7 @@ public class CustomXAConnectionFactoryAdapter implements ConnectionFactoryAdapte
 
         @Override
         public void cleanup() throws JMSException {
-            close(); // just call close atm -- as no pool yet
-
-            // TODO -- cleanup + reset clientID on the broker
+            close(); // just close for now -- no caching
         }
     }
 }

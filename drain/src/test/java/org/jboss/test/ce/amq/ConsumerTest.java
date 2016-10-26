@@ -45,7 +45,7 @@ public class ConsumerTest extends TestBase {
         try (Consumer consumer = new Consumer(URL, null, null, "tmp123")) {
             consumer.start();
 
-            MessageConsumer mc = consumer.queueConsumer(QUEUE);
+            MessageConsumer mc = consumer.queueConsumer(QUEUE1);
             Message message;
             while ((message = mc.receive(TIMEOUT)) != null) {
                 System.out.println(message);

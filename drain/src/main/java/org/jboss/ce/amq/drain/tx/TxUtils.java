@@ -23,10 +23,9 @@
 
 package org.jboss.ce.amq.drain.tx;
 
-import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
-import javax.jms.ConnectionFactory;
 import javax.transaction.Status;
 import javax.transaction.SystemException;
 import javax.transaction.TransactionManager;
@@ -39,33 +38,24 @@ import com.arjuna.ats.jta.recovery.XAResourceRecovery;
 import com.arjuna.common.internal.util.propertyservice.BeanPopulator;
 import org.jboss.ce.amq.drain.BrokerConfig;
 import org.jboss.ce.amq.drain.Utils;
-import org.jboss.ce.amq.drain.jms.CustomXAConnectionFactoryAdapter;
-import org.jboss.ce.amq.drain.jms.XAPooledConnectionFactoryAdapter;
+import org.jboss.ce.amq.drain.jms.ConnectionFactoryAdapterFactory;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 public class TxUtils {
 
-    public static void init(BrokerConfig... brokerConfigs) {
+    public static void init(BrokerConfig localBroker, BrokerConfig remoteBroke) {
         BeanPopulator.getDefaultInstance(ObjectStoreEnvironmentBean.class).setObjectStoreDir(Utils.getSystemPropertyOrEnvVar("recovery.store.dir", "/opt/amq/data/recovery"));
         RecoveryManager.delayRecoveryManagerThread();
         BeanPopulator.getDefaultInstance(RecoveryEnvironmentBean.class).setRecoveryBackoffPeriod(1);
 
-        List<XAResourceRecovery> recoveryClassNames = new ArrayList<>();
-        for (BrokerConfig config : brokerConfigs) {
-            recoveryClassNames.add(new BrokerXAResourceRecovery(config.getUrl(), config.getUsername(), config.getPassword()));
-        }
-        BeanPopulator.getDefaultInstance(JTAEnvironmentBean.class).setXaResourceRecoveries(recoveryClassNames);
+        List<XAResourceRecovery> recoveryList = Collections.<XAResourceRecovery>singletonList(new BrokerXAResourceRecovery(localBroker, remoteBroke));
+        BeanPopulator.getDefaultInstance(JTAEnvironmentBean.class).setXaResourceRecoveries(recoveryList);
     }
 
     public static TransactionManager getTransactionManager() {
         return com.arjuna.ats.jta.TransactionManager.transactionManager();
-    }
-
-    public static ConnectionFactory createXAConnectionFactory(String url) throws Exception {
-        return CustomXAConnectionFactoryAdapter.INSTANCE.createFactory(url);
-        // return XAPooledConnectionFactoryAdapter.getInstance().createFactory(url);
     }
 
     public static boolean isTxActive() {
@@ -90,7 +80,7 @@ public class TxUtils {
         }
     }
 
-    public synchronized static void shutdown() {
-        XAPooledConnectionFactoryAdapter.getInstance().shutdown();
+    public synchronized static void shutdown() throws Exception {
+        ConnectionFactoryAdapterFactory.shutdown();
     }
 }

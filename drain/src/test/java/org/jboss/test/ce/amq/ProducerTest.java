@@ -41,8 +41,12 @@ public class ProducerTest extends TestBase {
         try (Producer producer = new Producer(URL, null, null)) {
             producer.start();
 
-            Producer.ProducerProcessor handle = producer.processQueueMessages(QUEUE);
-            TextMessage message = producer.createTextMessage("TEST -- queue + " + System.currentTimeMillis());
+            Producer.ProducerProcessor handle = producer.processQueueMessages(QUEUE1);
+            TextMessage message = producer.createTextMessage("TEST -- queue1 + " + System.currentTimeMillis());
+            handle.processMessage(message);
+
+            handle = producer.processQueueMessages(QUEUE2);
+            producer.createTextMessage("TEST -- queue2 + " + System.currentTimeMillis());
             handle.processMessage(message);
         }
     }

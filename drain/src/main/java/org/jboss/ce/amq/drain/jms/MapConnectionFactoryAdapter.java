@@ -23,13 +23,35 @@
 
 package org.jboss.ce.amq.drain.jms;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import javax.jms.ConnectionFactory;
+import javax.jms.JMSException;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public interface ConnectionFactoryAdapter {
-    ConnectionFactory createFactory(String url) throws Exception;
+public abstract class MapConnectionFactoryAdapter implements ConnectionFactoryAdapter {
+    private final Map<String, ConnectionFactory> factories = new HashMap<>();
 
-    void shutdown() throws Exception;
+    protected abstract ConnectionFactory createFactoryInternal(String url) throws Exception;
+
+    public synchronized ConnectionFactory createFactory(String url) throws Exception {
+        ConnectionFactory factory = factories.get(url);
+        if (factory == null) {
+            factory = createFactoryInternal(url);
+            factories.put(url, factory);
+        }
+        return factory;
+    }
+
+    protected abstract void shutdown(ConnectionFactory factory) throws JMSException;
+
+    public synchronized void shutdown() throws Exception {
+        for (ConnectionFactory factory : factories.values()) {
+            shutdown(factory);
+        }
+        factories.clear();
+    }
 }

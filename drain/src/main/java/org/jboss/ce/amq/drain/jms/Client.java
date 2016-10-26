@@ -41,8 +41,6 @@ import javax.jms.TextMessage;
 import javax.jms.Topic;
 import javax.jms.TopicSubscriber;
 
-import org.jboss.ce.amq.drain.tx.TxUtils;
-
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
@@ -99,6 +97,8 @@ public abstract class Client implements Closeable {
         try {
             close(connection);
         } catch (JMSException ignored) {
+        } finally {
+            connection = null;
         }
     }
 
@@ -114,7 +114,7 @@ public abstract class Client implements Closeable {
     }
 
     public void start() throws Exception {
-        ConnectionFactory cf = (TxUtils.isTxActive() ? TxUtils.createXAConnectionFactory(url) : DefaultConnectionFactoryAdapter.INSTANCE.createFactory(url));
+        ConnectionFactory cf = ConnectionFactoryAdapterFactory.create().createFactory(url);
         connection = (username != null && password != null) ? cf.createConnection(username, password) : cf.createConnection();
         init(connection);
         session = connection.createSession(transacted, mode);
