@@ -27,6 +27,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.transaction.RollbackException;
+import javax.transaction.Status;
+import javax.transaction.Synchronization;
+import javax.transaction.SystemException;
+
+import org.jboss.ce.amq.drain.tx.TxUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,24 +44,60 @@ class Stats {
 
     private Map<String, Integer> sizes = new ConcurrentSkipListMap<>();
     private Map<String, AtomicInteger> counters = new ConcurrentSkipListMap<>();
+    private Map<String, StatsSync> synchs = new ConcurrentSkipListMap<>();
 
     void setSize(String destination, int size) {
         sizes.put(destination, size);
     }
 
     void increment(String destination) {
-        AtomicInteger x = counters.get(destination);
-        if (x == null) {
-            x = new AtomicInteger(0);
-            counters.put(destination, x);
+        if (TxUtils.isTxActive()) {
+            try {
+                StatsSync sync = synchs.get(destination);
+                if (sync == null) {
+                    sync = new StatsSync(destination);
+                    TxUtils.getTransactionManager().getTransaction().registerSynchronization(sync);
+                    synchs.put(destination, sync);
+                }
+                sync.increment();
+            } catch (RollbackException | SystemException ignored) {
+            }
+        } else {
+            AtomicInteger x = counters.get(destination);
+            if (x == null) {
+                x = new AtomicInteger(0);
+                counters.put(destination, x);
+            }
+            x.incrementAndGet();
         }
-        x.incrementAndGet();
     }
 
     public void dumpStats() {
         log.info("A-MQ migration statistics ... ('destination' -> [processed / all])");
         for (Map.Entry<String, AtomicInteger> entry : counters.entrySet()) {
             log.info(String.format("Processing stats: '%s' -> [%s / %s]", entry.getKey(), entry.getValue(), sizes.get(entry.getKey())));
+        }
+    }
+
+    private class StatsSync implements Synchronization {
+        private String destination;
+        private final AtomicInteger counter = new AtomicInteger(0);
+
+        public StatsSync(String destination) {
+            this.destination = destination;
+        }
+
+        private void increment() {
+            counter.incrementAndGet();
+        }
+
+        public void beforeCompletion() {
+        }
+
+        public void afterCompletion(int status) {
+            if (status == Status.STATUS_COMMITTED) {
+                counters.put(destination, counter);
+            }
         }
     }
 }

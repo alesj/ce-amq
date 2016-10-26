@@ -118,8 +118,6 @@ public class Main {
 
         final Semaphore statsSemaphore = new Semaphore(0);
 
-        final Stats stats = new Stats();
-
         BrokerConfig consumerConfig = new BrokerConfig(consumerURL, consumerUsername, consumerPassword);
         BrokerConfig producerConfig = new BrokerConfig(getProducerURL(), producerUsername, producerPassword);
 
@@ -187,8 +185,8 @@ public class Main {
                             msgsCounter++;
                             stats.increment(queue);
                         }
-                        log.info("Handled {} messages for queue '{}'.", msgsCounter, queue);
                         TxUtils.commit();
+                        log.info("Handled {} messages for queue '{}'.", msgsCounter, queue);
                     } finally {
                         TxUtils.end();
                     }
@@ -250,9 +248,8 @@ public class Main {
                                     stats.increment(tuple.topic + "/" + tuple.subscriptionName);
                                 }
                             }
-                            log.info("Handled {} messages for topic subscriber '{}' [{}].", msgsCounter, tuple.topic, tuple.subscriptionName);
-
                             TxUtils.commit();
+                            log.info("Handled {} messages for topic subscriber '{}' [{}].", msgsCounter, tuple.topic, tuple.subscriptionName);
                         } finally {
                             TxUtils.end();
                         }
