@@ -26,7 +26,6 @@ package org.jboss.ce.amq.drain.tx;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.net.InetAddress;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,7 +56,7 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
 
     private int index;
     private List<String> urls;
-    private int port = Integer.parseInt(Utils.getSystemPropertyOrEnvVar("amq.tcp.port", "61616"));
+    private BrokerFinder finder = new SrvBrokerFinder();
 
     public BrokerXAResourceRecovery(BrokerConfig localBroker, BrokerConfig remoteBroker) {
         this.localUrl = localBroker.getUrl();
@@ -98,15 +97,13 @@ class BrokerXAResourceRecovery implements XAResourceRecovery {
             if (appName == null) {
                 log.warning("No application.name var found, using remote broker for testing!");
                 urls.add(remoteBroker.getUrl()); // for testing purposes
+                return;
             } else {
                 serviceName = Utils.getSystemPropertyOrEnvVar(appName + ".amq.headless");
             }
         }
         try {
-            InetAddress[] ias = InetAddress.getAllByName(serviceName);
-            for (InetAddress ia : ias) {
-                urls.add(ia.getHostAddress() + ":" + port); // TODO -- port!?
-            }
+            urls.addAll(finder.find(serviceName));
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
