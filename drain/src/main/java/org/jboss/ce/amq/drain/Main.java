@@ -164,8 +164,8 @@ public class Main {
                 Collection<DestinationHandle> queues = queueConsumer.getJMX().queues();
                 log.info("Found queues: {}", queues);
                 for (DestinationHandle handle : queues) {
+                    TxUtils.begin(); // more fine-grained tx ... perhaps handle queue in parallel?
                     try {
-                        TxUtils.begin(); // more fine-grained tx ... perhaps handle queue in parallel?
                         if (terminating.get()) {
                             break;
                         }
