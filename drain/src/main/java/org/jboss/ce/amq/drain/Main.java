@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.jms.Message;
 
@@ -54,7 +55,7 @@ public class Main {
     private String producerUsername = Utils.getSystemPropertyOrEnvVar("producer.username", Utils.getSystemPropertyOrEnvVar("amq.user"));
     private String producerPassword = Utils.getSystemPropertyOrEnvVar("producer.password", Utils.getSystemPropertyOrEnvVar("amq.password"));
 
-    //private int msgsBatchSize = Integer.parseInt(Utils.getSystemPropertyOrEnvVar("msgs.batch.size", "1000"));
+    private int msgsBatchSize = Integer.parseInt(Utils.getSystemPropertyOrEnvVar("msgs.batch.size", "30"));
     private boolean migrateDTS = Boolean.parseBoolean(Utils.getSystemPropertyOrEnvVar("migrate.dts"));
 
     private final AtomicBoolean terminating = new AtomicBoolean();
@@ -158,43 +159,49 @@ public class Main {
     private void handleQueues() throws Exception {
         try (Producer queueProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
             try (Consumer queueConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
-                int msgsCounter;
-
                 // drain queues
                 Collection<DestinationHandle> queues = queueConsumer.getJMX().queues();
                 log.info("Found queues: {}", queues);
-                for (DestinationHandle handle : queues) {
-                    TxUtils.begin(); // more fine-grained tx ... perhaps handle queue in parallel?
-                    try {
-                        if (terminating.get()) {
-                            break;
-                        }
+                for (final DestinationHandle handle : queues) {
+                    final AtomicInteger msgsCounter = new AtomicInteger(0);
+                    final String queue = queueConsumer.getJMX().queueName(handle);
+                    log.info("Processing queue: '{}'", queue);
+                    stats.setSize(queue, queueConsumer.currentQueueSize(handle));
 
-                        queueProducer.start();
-                        queueConsumer.start();
+                    BatchTxAction action = new BatchTxAction() {
+                        boolean action(int batchSize) throws Exception {
+                            if (terminating.get()) {
+                                return true;
+                            }
 
-                        msgsCounter = 0;
-                        String queue = queueConsumer.getJMX().queueName(handle);
-                        log.info("Processing queue: '{}'", queue);
-                        stats.setSize(queue, queueConsumer.currentQueueSize(handle));
-                        Producer.ProducerProcessor processor = queueProducer.processQueueMessages(queue);
-                        Iterator<Message> iter = queueConsumer.consumeQueue(handle, queue);
-                        while (iter.hasNext() && !terminating.get()) {
-                            Message next = iter.next();
-                            processor.processMessage(next);
-                            msgsCounter++;
-                            stats.increment(queue);
+                            queueProducer.start();
+                            queueConsumer.start();
+
+                            Producer.ProducerProcessor processor = queueProducer.processQueueMessages(queue);
+                            Iterator<Message> iter = queueConsumer.consumeQueue(handle, queue);
+                            while (iter.hasNext() && !terminating.get()) {
+                                if (batchSize <= 0) {
+                                    return false;
+                                }
+                                batchSize--;
+
+                                Message next = iter.next();
+                                processor.processMessage(next);
+                                msgsCounter.incrementAndGet();
+                                stats.increment(queue);
+                            }
+                            return true;
                         }
-                        TxUtils.commit();
-                        log.info("Handled {} messages for queue '{}'.", msgsCounter, queue);
-                    } finally {
-                        TxUtils.end();
-                    }
+                    };
+                    //noinspection StatementWithEmptyBody
+                    while (!action.doInTx(msgsBatchSize, String.format("Handled %s messages for queue '%s'.", msgsCounter, queue)))
+                        ;
                 }
             }
         }
     }
 
+    // TODO -- batch
     private void handleDurableTopicSubscribers() throws Exception {
         try (Consumer dtsConsumer = new Consumer(consumerURL, consumerUsername, consumerPassword)) {
             try (Producer dtsProducer = new Producer(getProducerURL(), producerUsername, producerPassword)) {
