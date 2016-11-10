@@ -34,7 +34,7 @@ public class Main {
 
     public static void main(String[] args) {
         try {
-            Drainer drainer = (Boolean.getBoolean("brokerDrainer")) ? new BrokerServiceDrainer() : new ConsumerProducerDrainer();
+            Drainer drainer = (Utils.useBrokerDrainer()) ? new BrokerServiceDrainer() : new ConsumerProducerDrainer();
             drainer.validate(args);
             drainer.run(args);
         } catch (Exception e) {

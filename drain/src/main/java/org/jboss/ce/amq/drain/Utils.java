@@ -57,6 +57,10 @@ public class Utils {
         return getSystemPropertyOrEnvVar(key, convertSystemPropertyNameToEnvVar(key), defaultValue);
     }
 
+    public static boolean useBrokerDrainer() {
+        return Boolean.getBoolean(getSystemPropertyOrEnvVar("broker.drainer", "false"));
+    }
+
     public static String getBrokerName() {
         return Utils.getSystemPropertyOrEnvVar("broker.name", Utils.getSystemPropertyOrEnvVar("hostname", "localhost"));
     }
