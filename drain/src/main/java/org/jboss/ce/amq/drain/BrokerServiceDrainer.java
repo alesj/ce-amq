@@ -30,11 +30,15 @@ import org.apache.activemq.broker.BrokerService;
 import org.apache.activemq.command.ActiveMQDestination;
 import org.apache.activemq.command.ActiveMQQueue;
 import org.apache.activemq.network.NetworkConnector;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
 public class BrokerServiceDrainer implements Drainer {
+    private static final Logger log = LoggerFactory.getLogger(BrokerServiceDrainer.class);
+
     private static final String MESH_URL_FORMAT = "kube://%s:61616/?transportType=tcp";
 
     public void validate(String[] args) throws Exception {
@@ -79,10 +83,14 @@ public class BrokerServiceDrainer implements Drainer {
         broker.start();
         broker.waitUntilStarted();
 
-        while (broker.getAdminView().getTotalMessageCount() > 0) {
+        long msgs;
+        while ((msgs = broker.getAdminView().getTotalMessageCount()) > 0) {
+            log.info(String.format("Still %s msgs left to migrate ...", msgs));
             TimeUnit.SECONDS.sleep(5);
         }
 
         broker.stop();
+
+        log.info("-- [CE] A-MQ migration finished. --");
     }
 }
