@@ -56,4 +56,20 @@ public class Utils {
     public static String getSystemPropertyOrEnvVar(String key, String defaultValue) {
         return getSystemPropertyOrEnvVar(key, convertSystemPropertyNameToEnvVar(key), defaultValue);
     }
+
+    public static String getBrokerName() {
+        return Utils.getSystemPropertyOrEnvVar("broker.name", Utils.getSystemPropertyOrEnvVar("hostname", "localhost"));
+    }
+
+    public static String getApplicationName() {
+        return getSystemPropertyOrEnvVar("application.name");
+    }
+
+    public static String getUsername() {
+        return getSystemPropertyOrEnvVar("amq.user");
+    }
+
+    public static String getPassword() {
+        return getSystemPropertyOrEnvVar("amq.password");
+    }
 }

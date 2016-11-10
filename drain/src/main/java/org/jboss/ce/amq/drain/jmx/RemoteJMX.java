@@ -44,11 +44,7 @@ class RemoteJMX extends AbstractJMX implements JMX {
     private static final String brokerQueryString = "type=Broker,brokerName=%s";
     private static final String connectionQueryString = "type=Broker,brokerName=%s,connectionViewType=clientId,connectionName=%s";
 
-    private static String BROKER_NAME;
-
-    static {
-        BROKER_NAME = Utils.getSystemPropertyOrEnvVar("broker.name", Utils.getSystemPropertyOrEnvVar("hostname", "localhost"));
-    }
+    private static final String BROKER_NAME = Utils.getBrokerName();
 
     public Collection<DestinationHandle> queues() throws Exception {
         return destinations("Queues");

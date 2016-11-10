@@ -23,24 +23,11 @@
 
 package org.jboss.ce.amq.drain;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 /**
  * @author <a href="mailto:ales.justin@jboss.org">Ales Justin</a>
  */
-public class Main {
-    private static final Logger log = LoggerFactory.getLogger(Main.class);
+interface Drainer {
+    void validate(String[] args) throws Exception;
 
-    public static void main(String[] args) {
-        try {
-            Drainer drainer = (Boolean.getBoolean("brokerDrainer")) ? new BrokerServiceDrainer() : new ConsumerProducerDrainer();
-            drainer.validate(args);
-            drainer.run(args);
-        } catch (Exception e) {
-            log.error("Error draining broker: " + e.getMessage(), e);
-            System.exit(1);
-        }
-    }
-
+    void run(String[] args) throws Exception;
 }
