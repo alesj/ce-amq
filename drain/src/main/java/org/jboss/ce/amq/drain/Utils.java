@@ -58,7 +58,7 @@ public class Utils {
     }
 
     public static boolean useBrokerDrainer() {
-        return Boolean.getBoolean(getSystemPropertyOrEnvVar("broker.drainer", "false"));
+        return Boolean.parseBoolean(getSystemPropertyOrEnvVar("broker.drainer", "false"));
     }
 
     public static String getBrokerName() {
