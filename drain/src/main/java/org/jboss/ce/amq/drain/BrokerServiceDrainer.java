@@ -98,7 +98,7 @@ public class BrokerServiceDrainer implements Drainer {
         drainingNetworkConnector.setMessageTTL(-1);
         drainingNetworkConnector.setConsumerTTL(1);
         drainingNetworkConnector.setStaticBridge(true);
-        drainingNetworkConnector.setStaticallyIncludedDestinations(Arrays.asList(new ActiveMQDestination[]{new ActiveMQQueue("*")}));
+        drainingNetworkConnector.setStaticallyIncludedDestinations(Arrays.asList(new ActiveMQDestination[]{new ActiveMQQueue(">")}));
 
         broker.start();
         broker.waitUntilStarted();
