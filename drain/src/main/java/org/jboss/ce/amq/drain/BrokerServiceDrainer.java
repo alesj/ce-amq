@@ -23,13 +23,19 @@
 
 package org.jboss.ce.amq.drain;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.activemq.broker.BrokerService;
+import org.apache.activemq.broker.region.policy.PolicyEntry;
+import org.apache.activemq.broker.region.policy.PolicyMap;
 import org.apache.activemq.command.ActiveMQDestination;
 import org.apache.activemq.command.ActiveMQQueue;
+import org.apache.activemq.network.ConditionalNetworkBridgeFilterFactory;
 import org.apache.activemq.network.NetworkConnector;
+import org.apache.activemq.store.PersistenceAdapter;
+import org.apache.activemq.store.kahadb.KahaDBPersistenceAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +65,20 @@ public class BrokerServiceDrainer implements Drainer {
             dataDir = args[0];
         }
         broker.setDataDirectory(dataDir);
+        log.info(String.format("Data directory %s.", dataDir));
+
+        final PersistenceAdapter adaptor = new KahaDBPersistenceAdapter();
+        adaptor.setDirectory(new File(dataDir + "/kahadb"));
+        broker.setPersistenceAdapter(adaptor);
+
+        PolicyMap policyMap = new PolicyMap();
+        PolicyEntry defaultEntry = new PolicyEntry();
+        defaultEntry.setExpireMessagesPeriod(0);
+        ConditionalNetworkBridgeFilterFactory filterFactory = new ConditionalNetworkBridgeFilterFactory();
+        filterFactory.setReplayWhenNoConsumers(true);
+        defaultEntry.setNetworkBridgeFilterFactory(filterFactory);
+        policyMap.setDefaultEntry(defaultEntry);
+        broker.setDestinationPolicy(policyMap);
 
         // the broker could also be created from the xml config... to ensure match with any journal options etc.
         // that would be important if the journal is non default.
