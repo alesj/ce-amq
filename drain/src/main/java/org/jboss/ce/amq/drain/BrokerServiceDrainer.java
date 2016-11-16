@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
 public class BrokerServiceDrainer implements Drainer {
     private static final Logger log = LoggerFactory.getLogger(BrokerServiceDrainer.class);
 
-    private static final String MESH_URL_FORMAT = "kube://%s:61616/?transportType=tcp";
+    private static final String MESH_URL_FORMAT = "kube://%s:61616/?queryInterval=%s";
 
     public void validate(String[] args) throws Exception {
         String dataDir = Utils.getSystemPropertyOrEnvVar("activemq.data");
@@ -89,7 +89,8 @@ public class BrokerServiceDrainer implements Drainer {
         if (meshServiceName == null) {
             meshServiceName = Utils.getApplicationName() + "-amq-tcp";
         }
-        String meshURL = String.format(MESH_URL_FORMAT, meshServiceName);
+        String queryInterval = Utils.getSystemPropertyOrEnvVar("amq.mesh.query.interval", "3");
+        String meshURL = String.format(MESH_URL_FORMAT, meshServiceName, queryInterval);
 
         // programmatically add the draining bridge, depends on the mesh url only (could be in the xml config either)
         NetworkConnector drainingNetworkConnector = broker.addNetworkConnector(meshURL);
